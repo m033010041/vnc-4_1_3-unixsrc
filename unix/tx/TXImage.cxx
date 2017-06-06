@@ -1,15 +1,15 @@
 /* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * 
+ *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This software is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this software; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307,
@@ -31,12 +31,18 @@
 #include <rfb/TransImageGetter.h>
 #include <rfb/Exception.h>
 #include <rfb/LogWriter.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "TXWindow.h"
 #include "TXImage.h"
 
 using namespace rfb;
 
 static rfb::LogWriter vlog("TXImage");
+
+static void superscale(XImage * ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf);
+
 
 TXImage::TXImage(Display* d, int width, int height, Visual* vis_, int depth_)
   : xim(0), dpy(d), vis(vis_), depth(depth_), shminfo(0), tig(0), cube(0)
@@ -338,3 +344,66 @@ void TXImage::getNativePixelFormat(Visual* vis, int depth)
     }
   }
 }
+
+
+
+/*
+ * Super sampling scale. Down only.
+ */
+static void superscale(XImage * ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf)
+{
+	unsigned int x, y, i;
+	char * __restrict__ ibuf;
+
+	if((ximg->width == width) && (ximg->height == height)) return;
+
+	ibuf = ximg->data;
+
+	printf("ximg->width=%d, height=%d\n", ximg->width, ximg->height);
+
+	unsigned int divx[width];
+	unsigned int divy[height];
+	memset(divx, 0, sizeof divx);
+	memset(divy, 0, sizeof divy);
+	for(x = 0; x < ximg->width; x++){
+		 divx[x * width / ximg->width]++;
+	}
+	for(y = 0; y < ximg->height; y++){
+		 divy[y * height / ximg->height]++;
+	}
+
+	unsigned int tmp[width * 4];
+
+	unsigned int *xoff[ximg->width];
+	for(x = 0; x < ximg->width; x++){
+		xoff[x] = tmp + (x * width / ximg->width) * 3;
+	}
+
+	unsigned int y0;
+	unsigned int * __restrict__ dest;
+	for(y = 0; y < ximg->height;){
+		unsigned int ydiv = divy[y * height / ximg->height];
+		char * __restrict__ ydest = &newBuf[bytesperline * (y * height / ximg->height)];
+		memset(tmp, 0, sizeof tmp);
+		ibuf = &ximg->data[y * ximg->width * 3];
+		for(y0 = y + ydiv; y < y0; y++){
+			for(x = 0; x < ximg->width; x++){
+				dest = xoff[x];
+				for(i = 0; i < 3; i++){
+					*dest++ += *ibuf++;
+				}
+			}
+		}
+		unsigned int * __restrict__ src = tmp;
+		for(x = 0; x < width; x++){
+			ydest[2] = *src++ / ydiv / divx[x];
+			ydest[1] = *src++ / ydiv / divx[x];
+			ydest[0] = *src++ / ydiv / divx[x];
+			ydest += 4;
+		}
+	}
+
+}
+
+
+

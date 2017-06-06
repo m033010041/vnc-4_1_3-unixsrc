@@ -1,0 +1,46 @@
+This file contains any messages produced by compilers while
+running configure, to aid debugging if configure makes a mistake.
+
+configure:541: checking for gcc
+configure:654: checking whether the C compiler (gcc  ) works
+configure:670: gcc -o conftest    conftest.c  1>&5
+configure:667:1: warning: return type defaults to 'int' [-Wimplicit-int]
+ main(){return(0);}
+ ^
+configure:696: checking whether the C compiler (gcc  ) is a cross-compiler
+configure:701: checking whether we are using GNU C
+configure:710: gcc -E conftest.c
+configure:729: checking whether gcc accepts -g
+configure:765: checking for c++
+configure:797: checking whether the C++ compiler (c++  ) works
+configure:813: c++ -o conftest    conftest.C  1>&5
+configure:839: checking whether the C++ compiler (c++  ) is a cross-compiler
+configure:844: checking whether we are using GNU C++
+configure:853: c++ -E conftest.C
+configure:872: checking whether c++ accepts -g
+configure:921: gcc -c -O2  conftest.c 1>&5
+configure:938: gcc -c -O2  conftest.c 1>&5
+configure: In function 'main':
+configure:934:1: warning: implicit declaration of function 'exit' [-Wimplicit-function-declaration]
+ exit (42);
+ ^
+configure:934:1: warning: incompatible implicit declaration of built-in function 'exit'
+configure:934:1: note: include '<stdlib.h>' or provide a declaration of 'exit'
+configure:957: checking for ranlib
+configure:985: checking whether make sets ${MAKE}
+configure:1049: checking how to run the C++ preprocessor
+configure:1067: c++ -E  conftest.C >/dev/null 2>conftest.out
+configure:1096: checking for X
+configure:1163: c++ -E  conftest.C >/dev/null 2>conftest.out
+configure:1239: c++ -o conftest -O2 -Wall   conftest.C -lXt  1>&5
+configure: In function 'int main()':
+configure:1235:10: error: 'XtMalloc' was not declared in this scope
+ ${x_direct_test_function}()
+          ^
+configure: failed program was:
+#line 1232 "configure"
+#include "confdefs.h"
+
+int main() {
+XtMalloc()
+; return 0; }
