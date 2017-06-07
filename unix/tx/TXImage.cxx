@@ -40,6 +40,7 @@
 using namespace rfb;
 
 static rfb::LogWriter vlog("TXImage");
+static XImage* xim_tmp;
 
 static void superscale(XImage * ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf);
 
@@ -146,6 +147,11 @@ void TXImage::put(Window win, GC gc, const rfb::Rect& r)
     tig->getImage(ximDataStart, r,
                   xim->bytes_per_line / (xim->bits_per_pixel / 8));
   }
+
+  memcpy(xim_tmp, xim, sizeof(xim));
+
+  superscale(xim_tmp, 400, 300, xim->bits_per_pixel, xim->data);
+
   if (usingShm()) {
     XShmPutImage(dpy, win, gc, xim, x, y, x, y, w, h, False);
   } else {
@@ -201,7 +207,11 @@ void TXImage::createXImage()
 
     xim = XShmCreateImage(dpy, vis, depth, ZPixmap,
                           0, shminfo, width(), height());
+    xim_tmp = XShmCreateImage(dpy, vis, depth, ZPixmap,
+                          0, shminfo, width(), height());
+    printf("%d, %d\n",width(), height());
 
+    printf("xim->bytes_per_line=%d\n", xim->bytes_per_line);
     if (xim) {
       shminfo->shmid = shmget(IPC_PRIVATE,
                               xim->bytes_per_line * xim->height,
@@ -350,7 +360,7 @@ void TXImage::getNativePixelFormat(Visual* vis, int depth)
 /*
  * Super sampling scale. Down only.
  */
-static void superscale(XImage * ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf)
+static void superscale(XImage* ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf)
 {
 	unsigned int x, y, i;
 	char * __restrict__ ibuf;
