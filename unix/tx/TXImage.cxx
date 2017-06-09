@@ -41,9 +41,10 @@ using namespace rfb;
 
 static rfb::LogWriter vlog("TXImage");
 static XImage* xim_tmp;
+static XShmSegmentInfo* shminfo_tmp;
 
 static void superscale(XImage * ximg, int width, int height, unsigned int bytesperline, char* __restrict__ newBuf);
-
+static void reduce_pixmap50(XImage* oldimg, XImage* newimg);
 
 TXImage::TXImage(Display* d, int width, int height, Visual* vis_, int depth_)
   : xim(0), dpy(d), vis(vis_), depth(depth_), shminfo(0), tig(0), cube(0)
@@ -141,6 +142,7 @@ void TXImage::put(Window win, GC gc, const rfb::Rect& r)
   int y = r.tl.y;
   int w = r.width();
   int h = r.height();
+  static int showflag=0;
   if (data != (rdr::U8*)xim->data) {
     rdr::U8* ximDataStart = ((rdr::U8*)xim->data + y * xim->bytes_per_line
                              + x * (xim->bits_per_pixel / 8));
@@ -148,12 +150,27 @@ void TXImage::put(Window win, GC gc, const rfb::Rect& r)
                   xim->bytes_per_line / (xim->bits_per_pixel / 8));
   }
 
-  memcpy(xim_tmp, xim, sizeof(xim));
 
-  superscale(xim_tmp, 400, 300, xim->bits_per_pixel, xim->data);
+  if(showflag == 0)
+  {
+	  printf("width=%d, height=%d\n", xim->width, xim->height);
+	  printf("byte_order=%d\n", xim->byte_order);
+	  printf("bytes_per_line=%d\n", xim->bytes_per_line);
+	  printf("red_mask=%lu\n", xim->red_mask);
+	  printf("green_mask=%lu\n", xim->green_mask);
+	  printf("blue_mask=%lu\n", xim->blue_mask);
+	  printf("depth=%d\n", xim->depth);
+	  printf("format=%d\n", xim->format);
+	  printf("xim->bits_per_pixel = %d\n", xim->bits_per_pixel);
+  }
+  showflag=1;
+  //memcpy(xim_tmp, xim, sizeof(xim));
+
+  //superscale(xim_tmp, 400, 300, xim->bits_per_pixel, xim->data);
+  reduce_pixmap50(xim, xim_tmp);
 
   if (usingShm()) {
-    XShmPutImage(dpy, win, gc, xim, x, y, x, y, w, h, False);
+    XShmPutImage(dpy, win, gc, xim_tmp, x, y, x, y, w, h, False);
   } else {
     XPutImage(dpy, win, gc, xim, x, y, x, y, w, h);
   }
@@ -204,28 +221,35 @@ void TXImage::createXImage()
 {
   if (XShmQueryExtension(dpy)) {
     shminfo = new XShmSegmentInfo;
+    shminfo_tmp = new XShmSegmentInfo;
 
     xim = XShmCreateImage(dpy, vis, depth, ZPixmap,
                           0, shminfo, width(), height());
     xim_tmp = XShmCreateImage(dpy, vis, depth, ZPixmap,
-                          0, shminfo, width(), height());
+                          0, shminfo_tmp, width(), height());
     printf("%d, %d\n",width(), height());
 
     printf("xim->bytes_per_line=%d\n", xim->bytes_per_line);
-    if (xim) {
+    if (xim && xim_tmp) {
       shminfo->shmid = shmget(IPC_PRIVATE,
                               xim->bytes_per_line * xim->height,
                               IPC_CREAT|0777);
+      shminfo_tmp->shmid = shmget(IPC_PRIVATE,
+                              xim_tmp->bytes_per_line * xim_tmp->height,
+                              IPC_CREAT|0777);
 
-      if (shminfo->shmid != -1) {
+
+      if ((shminfo->shmid != -1)&&(shminfo_tmp->shmid != -1)) {
         shminfo->shmaddr = xim->data = (char*)shmat(shminfo->shmid, 0, 0);
+        shminfo_tmp->shmaddr = xim_tmp->data = (char*)shmat(shminfo_tmp->shmid, 0, 0);
 
-        if (shminfo->shmaddr != (char *)-1) {
+        if ((shminfo->shmaddr != (char *)-1)&&(shminfo_tmp->shmaddr != (char *)-1)) {
 
-          shminfo->readOnly = False;
+          shminfo_tmp->readOnly = shminfo->readOnly = False;
 
           XErrorHandler oldHdlr = XSetErrorHandler(XShmAttachErrorHandler);
           XShmAttach(dpy, shminfo);
+          XShmAttach(dpy, shminfo_tmp);
           XSync(dpy, False);
           XSetErrorHandler(oldHdlr);
 
@@ -236,25 +260,29 @@ void TXImage::createXImage()
           }
 
           shmdt(shminfo->shmaddr);
+          shmdt(shminfo_tmp->shmaddr);
         } else {
           vlog.error("shmat failed");
           perror("shmat");
         }
 
         shmctl(shminfo->shmid, IPC_RMID, 0);
+        shmctl(shminfo_tmp->shmid, IPC_RMID, 0);
       } else {
         vlog.error("shmget failed");
         perror("shmget");
       }
 
       XDestroyImage(xim);
-      xim = 0;
+      XDestroyImage(xim_tmp);
+      xim_tmp = xim = 0;
     } else {
       vlog.error("XShmCreateImage failed");
     }
 
     delete shminfo;
-    shminfo = 0;
+    delete shminfo_tmp;
+    shminfo_tmp = shminfo = 0;
   }
 
   xim = XCreateImage(dpy, vis, depth, ZPixmap,
@@ -280,6 +308,18 @@ void TXImage::destroyXImage()
   // XDestroyImage() will free(xim->data) if appropriate
   if (xim) XDestroyImage(xim);
   xim = 0;
+
+ if (shminfo_tmp) {
+    vlog.debug("Freeing shared memory XImage");
+    shmdt(shminfo_tmp->shmaddr);
+    shmctl(shminfo_tmp->shmid, IPC_RMID, 0);
+    delete shminfo_tmp;
+    shminfo_tmp = 0;
+  }
+  // XDestroyImage() will free(xim->data) if appropriate
+  if (xim_tmp) XDestroyImage(xim_tmp);
+  xim_tmp = 0;
+
 }
 
 
@@ -389,6 +429,8 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 		xoff[x] = tmp + (x * width / ximg->width) * 3;
 	}
 
+	printf("fuckkkkkkkkkkkkkkkkkk\n");
+	unsigned int count = 0;
 	unsigned int y0;
 	unsigned int * __restrict__ dest;
 	for(y = 0; y < ximg->height;){
@@ -398,8 +440,10 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 		ibuf = &ximg->data[y * ximg->width * 3];
 		for(y0 = y + ydiv; y < y0; y++){
 			for(x = 0; x < ximg->width; x++){
+				printf("count=%d\n", count++);
 				dest = xoff[x];
 				for(i = 0; i < 3; i++){
+					printf("count=%d\n", count++);
 					*dest++ += *ibuf++;
 				}
 			}
@@ -416,4 +460,52 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 }
 
 
+static void reduce_pixmap50(XImage* oldimg, XImage* newimg)
+{
+	int i, j;
 
+	//printf("oldimg->height=%d, oldimg->width=%d\n", oldimg->height, oldimg->width);
+	//printf("newimg->height=%d, newimg->width=%d\n", newimg->height, newimg->width);
+
+	for(i=0; i<oldimg->height; i=i+2) {
+		for(j=0; j<oldimg->width; j=j+2){
+			unsigned long  p1 = XGetPixel(oldimg, j, i);
+			unsigned long p1R = p1 & 0x00ff0000; //red_mask
+			unsigned long p1G = p1 & 0x0000ff00; //green_mask
+			unsigned long p1B = p1 & 0x000000ff; //blue_mask
+
+			unsigned long  p2 = XGetPixel(oldimg, j+1, i);
+			unsigned long p2R = p2 & 0x00ff0000; //red_mask
+			unsigned long p2G = p2 & 0x0000ff00; //green_mask
+			unsigned long p2B = p2 & 0x000000ff; //blue_mask
+
+			unsigned long  p3 = XGetPixel(oldimg, j, i+1);
+			unsigned long p3R = p3 & 0x00ff0000; //red_mask
+			unsigned long p3G = p3 & 0x0000ff00; //green_mask
+			unsigned long p3B = p3 & 0x000000ff; //blue_mask
+
+			unsigned long  p4 = XGetPixel(oldimg, j+1, i+1);
+			unsigned long p4R = p4 & 0x00ff0000; //red_mask
+			unsigned long p4G = p4 & 0x0000ff00; //green_mask
+			unsigned long p4B = p4 & 0x000000ff; //blue_mask
+
+			unsigned long avgR = (p1R+p2R+p3R+p4R)/4 & 0x00ff0000;
+			unsigned long avgG = (p1G+p2G+p3G+p4G)/4 & 0x0000ff00;
+			unsigned long avgB = (p1B+p2B+p3B+p4B)/4 & 0x000000ff;
+
+			unsigned long avgPixel = avgR | avgG | avgB;
+
+			XPutPixel(newimg, j/2, i/2, avgPixel);
+		}
+	}
+}
+
+
+/*
+static void downscale(XImage* src, XImage* dst, int srcWidth, int srcHeight, int dstWidth, int dstHeight)
+{
+	float x_ratio = ((float)(srcWidth-1.0)) / dstHeight;
+	float y_ratio =
+}
+
+*/
