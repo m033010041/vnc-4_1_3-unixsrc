@@ -142,7 +142,8 @@ void TXImage::put(Window win, GC gc, const rfb::Rect& r)
   int y = r.tl.y;
   int w = r.width();
   int h = r.height();
-  static int showflag=0;
+  static int count=0;
+
   if (data != (rdr::U8*)xim->data) {
     rdr::U8* ximDataStart = ((rdr::U8*)xim->data + y * xim->bytes_per_line
                              + x * (xim->bits_per_pixel / 8));
@@ -150,27 +151,13 @@ void TXImage::put(Window win, GC gc, const rfb::Rect& r)
                   xim->bytes_per_line / (xim->bits_per_pixel / 8));
   }
 
-
-  if(showflag == 0)
-  {
-	  printf("width=%d, height=%d\n", xim->width, xim->height);
-	  printf("byte_order=%d\n", xim->byte_order);
-	  printf("bytes_per_line=%d\n", xim->bytes_per_line);
-	  printf("red_mask=%lu\n", xim->red_mask);
-	  printf("green_mask=%lu\n", xim->green_mask);
-	  printf("blue_mask=%lu\n", xim->blue_mask);
-	  printf("depth=%d\n", xim->depth);
-	  printf("format=%d\n", xim->format);
-	  printf("xim->bits_per_pixel = %d\n", xim->bits_per_pixel);
-  }
-  showflag=1;
-  //memcpy(xim_tmp, xim, sizeof(xim));
-
   //superscale(xim_tmp, 400, 300, xim->bits_per_pixel, xim->data);
   reduce_pixmap50(xim, xim_tmp);
 
+
   if (usingShm()) {
-    XShmPutImage(dpy, win, gc, xim_tmp, x, y, x, y, w, h, False);
+    XShmPutImage(dpy, win, gc, xim_tmp, x/2, y/2, x/2, y/2, w/2, h/2, False);
+    //XShmPutImage(dpy, win, gc, xim, x, y, x, y, w, h, False);
   } else {
     XPutImage(dpy, win, gc, xim, x, y, x, y, w, h);
   }
@@ -226,7 +213,7 @@ void TXImage::createXImage()
     xim = XShmCreateImage(dpy, vis, depth, ZPixmap,
                           0, shminfo, width(), height());
     xim_tmp = XShmCreateImage(dpy, vis, depth, ZPixmap,
-                          0, shminfo_tmp, width(), height());
+                          0, shminfo_tmp, width()/2, height()/2);
     printf("%d, %d\n",width(), height());
 
     printf("xim->bytes_per_line=%d\n", xim->bytes_per_line);
@@ -409,7 +396,6 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 
 	ibuf = ximg->data;
 
-	printf("ximg->width=%d, height=%d\n", ximg->width, ximg->height);
 
 	unsigned int divx[width];
 	unsigned int divy[height];
@@ -429,7 +415,6 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 		xoff[x] = tmp + (x * width / ximg->width) * 3;
 	}
 
-	printf("fuckkkkkkkkkkkkkkkkkk\n");
 	unsigned int count = 0;
 	unsigned int y0;
 	unsigned int * __restrict__ dest;
@@ -440,10 +425,8 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 		ibuf = &ximg->data[y * ximg->width * 3];
 		for(y0 = y + ydiv; y < y0; y++){
 			for(x = 0; x < ximg->width; x++){
-				printf("count=%d\n", count++);
 				dest = xoff[x];
 				for(i = 0; i < 3; i++){
-					printf("count=%d\n", count++);
 					*dest++ += *ibuf++;
 				}
 			}
@@ -463,12 +446,58 @@ static void superscale(XImage* ximg, int width, int height, unsigned int bytespe
 static void reduce_pixmap50(XImage* oldimg, XImage* newimg)
 {
 	int i, j;
+	unsigned long p1base, p2base, p3base, p4base, pnew;
+	unsigned char p1R, p1G, p1B;
+	unsigned char p2R, p2G, p2B;
+	unsigned char p3R, p3G, p3B;
+	unsigned char p4R, p4G, p4B;
+
+	/* I think raw data format is B-G-R-A */
 
 	//printf("oldimg->height=%d, oldimg->width=%d\n", oldimg->height, oldimg->width);
 	//printf("newimg->height=%d, newimg->width=%d\n", newimg->height, newimg->width);
 
 	for(i=0; i<oldimg->height; i=i+2) {
-		for(j=0; j<oldimg->width; j=j+2){
+		for(j=0; j<oldimg->width; j=j+2) {
+
+			p1base =  (j<<2)    +  i   *(oldimg->bytes_per_line);
+			p2base = ((j+1)<<2) +  i   *(oldimg->bytes_per_line);
+			p3base =  (j<<2)    + (i+1)*(oldimg->bytes_per_line);
+			p4base = ((j+1)<<2)  + (i+1)*(oldimg->bytes_per_line);
+			pnew   = ((j/2)<<2) + (i/2)*(newimg->bytes_per_line);
+
+
+			p1B = oldimg->data[p1base];
+			p1G = oldimg->data[p1base+1];
+			p1R = oldimg->data[p1base+2];
+			//p1A = oldimg->data[p1base+3] & 0x00;
+
+			p2B = oldimg->data[p2base];
+			p2G = oldimg->data[p2base+1];
+			p2R = oldimg->data[p2base+2];
+			//p2A = oldimg->data[p2base+3] & 0x00;
+
+			p3B = oldimg->data[p3base];
+			p3G = oldimg->data[p3base+1];
+			p3R = oldimg->data[p3base+2];
+			//p3A = oldimg->data[p3base+3] & 0x00;
+
+			p4B = oldimg->data[p4base];
+			p4G = oldimg->data[p4base+1];
+			p4R = oldimg->data[p4base+2];
+			//p4A = oldimg->data[p4base+3] & 0x00;
+
+			unsigned char avgR = (p1R+p2R+p3R+p4R)>>2;
+			unsigned char avgG = (p1G+p2G+p3G+p4G)>>2;
+			unsigned char avgB = (p1B+p2B+p3B+p4B)>>2;
+
+			newimg->data[pnew]   = avgB;
+			newimg->data[pnew+1] = avgG;
+			newimg->data[pnew+2] = avgR;
+			newimg->data[pnew+3] = 0x00;
+
+/* This method is not effiency but it works */
+/*
 			unsigned long  p1 = XGetPixel(oldimg, j, i);
 			unsigned long p1R = p1 & 0x00ff0000; //red_mask
 			unsigned long p1G = p1 & 0x0000ff00; //green_mask
@@ -489,13 +518,8 @@ static void reduce_pixmap50(XImage* oldimg, XImage* newimg)
 			unsigned long p4G = p4 & 0x0000ff00; //green_mask
 			unsigned long p4B = p4 & 0x000000ff; //blue_mask
 
-			unsigned long avgR = (p1R+p2R+p3R+p4R)/4 & 0x00ff0000;
-			unsigned long avgG = (p1G+p2G+p3G+p4G)/4 & 0x0000ff00;
-			unsigned long avgB = (p1B+p2B+p3B+p4B)/4 & 0x000000ff;
-
-			unsigned long avgPixel = avgR | avgG | avgB;
-
 			XPutPixel(newimg, j/2, i/2, avgPixel);
+*/
 		}
 	}
 }

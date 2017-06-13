@@ -1,0 +1,6 @@
+*.o
+*.a
+/unix/*.o
+/unix/tx/*.o
+/unix/vncviewer/*.o
+
