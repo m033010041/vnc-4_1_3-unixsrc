@@ -365,18 +365,18 @@ void DesktopWindow::handleEvent(TXWindow* w, XEvent* ev)
   case MotionNotify:
     while (XCheckTypedWindowEvent(dpy, win(), MotionNotify, ev));
     if (viewport && viewport->bumpScrollEvent(&ev->xmotion)) break;
-    handlePointerEvent(Point(ev->xmotion.x, ev->xmotion.y),
+    handlePointerEvent(Point(ev->xmotion.x*2, ev->xmotion.y*2),
                        (ev->xmotion.state & 0x1f00) >> 8);
     break;
 
   case ButtonPress:
-    handlePointerEvent(Point(ev->xbutton.x, ev->xbutton.y),
+    handlePointerEvent(Point(ev->xbutton.x*2, ev->xbutton.y*2),
                        (((ev->xbutton.state & 0x1f00) >> 8) |
                         (1 << (ev->xbutton.button-1))));
     break;
 
   case ButtonRelease:
-    handlePointerEvent(Point(ev->xbutton.x, ev->xbutton.y),
+    handlePointerEvent(Point(ev->xbutton.x*2, ev->xbutton.y*2),
                        (((ev->xbutton.state & 0x1f00) >> 8) &
                         ~(1 << (ev->xbutton.button-1))));
     break;

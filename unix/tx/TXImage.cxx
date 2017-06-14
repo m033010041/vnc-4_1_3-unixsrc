@@ -464,7 +464,7 @@ static void reduce_pixmap50(XImage* oldimg, XImage* newimg)
 			p2base = ((j+1)<<2) +  i   *(oldimg->bytes_per_line);
 			p3base =  (j<<2)    + (i+1)*(oldimg->bytes_per_line);
 			p4base = ((j+1)<<2)  + (i+1)*(oldimg->bytes_per_line);
-			pnew   = ((j/2)<<2) + (i/2)*(newimg->bytes_per_line);
+			pnew   = (j<<1) + (i/2)*(newimg->bytes_per_line);
 
 
 			p1B = oldimg->data[p1base];
