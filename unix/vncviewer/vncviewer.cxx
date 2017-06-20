@@ -239,8 +239,7 @@ int main(int argc, char** argv)
     TXWindow::init(dpy, "Vncviewer");
     xloginIconifier.iconify(dpy);
     CConn cc(dpy, argc, argv, sock, vncServerName, listenMode);
-    cc.setDesktopSize(512, 384);
-
+    //cc.setDesktopSize(512, 384);
     // X events are processed whenever reading from the socket would block.
 
     while (true) {
