@@ -3,4 +3,5 @@
 /unix/*.o
 /unix/tx/*.o
 /unix/vncviewer/*.o
+/unix/vncviewer/vncviewer
 
